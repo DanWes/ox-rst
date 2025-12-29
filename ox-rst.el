@@ -1432,13 +1432,23 @@ holding contextual information."
 		 (title (plist-get attributes :title))
          (class (plist-get attributes :class))
 		 (label (org-element-property :name special-block))
-         (type (org-element-property :type special-block)))
+         (type (org-element-property :type special-block))
+     (attr-str-ignore '(:title))
+         (attr-str ""))
+    ;; combine with `org-rst--make-attribute-string'?
+    (cl-loop for (key value) on attributes by 'cddr
+             do (unless (member key attr-str-ignore)
+                  (setq attr-str
+                        (concat attr-str
+                                (format "    %s:" key)
+                                (when value (format " %s" value))
+                                "\n"))))
     (concat
      (format ".. %s::" type)
      (when title (format " %s" title))
      "\n"
-     (when class (format "    :class: %s\n" class))
      (when label (format "    :name: %s\n" label))
+     (when attr-str attr-str)
      "\n"
      (when contents
        (org-rst--indent-string contents org-rst-quote-margin)))))
