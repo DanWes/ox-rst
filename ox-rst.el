@@ -1512,8 +1512,13 @@ a communication channel."
                 (cond
                  ((not (= 1 rowgroup-number))
                   ?-)
-                 ((org-export-table-has-header-p
-                   (org-element-lineage table-row 'table) info)
+                 ;; ((org-export-table-has-header-p
+                 ;;   (org-element-lineage table-row 'table) info)
+                 ;;  ?=)
+                 ;; double line only at the end of the header
+                 ((and (org-export-table-has-header-p
+                        (org-element-lineage table-row 'table) info)
+                       (org-export-table-row-ends-header-p table-row info))
                   ?=)
                  (t ?-)))
                (makeline
