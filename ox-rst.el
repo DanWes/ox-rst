@@ -1541,7 +1541,29 @@ a communication channel."
            (when (= 0 row-number)
              (concat (funcall makeline contents ?-) "\n"))
            "|" contents "|\n" hline))
-      nil
+      ;; nil
+      ;; the else section is hit whenever there is a new group, i.e. the row
+      ;; after a hline, OR if there is only one row in the table!!!
+      ;; (org-export-table-row-number table-row info) returns non-nil if there
+      ;; is only ONE row in the table (nil otherwise)
+      ;; same for `contents'; it is nil if not first row
+      (when contents
+        (let* ((makeline
+                (function
+                 (lambda (_rowcontents linebit)
+                   (format "+%s+"
+                           (mapconcat
+                            'identity
+                            (mapcar
+                             (lambda (table-cell)
+                               (make-string (string-width table-cell)
+                                            linebit))
+                             (split-string contents "|"))
+                            "+"))))))
+          (concat
+           (concat (funcall makeline contents ?-) "\n")
+           (concat "|" contents "|\n")
+           (concat (funcall makeline contents ?-) "\n"))))
       )))
 
 
