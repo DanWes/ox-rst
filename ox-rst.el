@@ -94,6 +94,9 @@
   :options-alist
   '((:subtitle "SUBTITLE" nil nil parse)
     (:rst-link-use-abs-url nil "rst-link-use-abs-url" org-rst-link-use-abs-url)
+    (:rst-metadata nil "rst-metadata" org-rst-metadata)
+    (:rst-metadata-format nil nil org-rst-metadata-format)
+    (:rst-metadata-timestamp-format nil nil org-rst-metadata-timestamp-format)
     (:rst-inline-images nil nil org-rst-inline-images)
     (:rst-inline-image-rules nil nil org-rst-inline-image-rules)
     (:rst-link-org-files-as-rst nil nil org-rst-link-org-files-as-rst)
@@ -159,6 +162,92 @@ When nil, the links still point to the plain \".org\" file."
   "Should we prepend relative links with RST_LINK_HOME?"
   :group 'org-export-rst
   :type 'boolean)
+
+
+(defcustom org-rst-metadata 'auto
+  "Non-nil means insert metadata in RST export.
+
+When set to `auto', check against the
+`org-export-with-author/email/creator/date' variables to set the
+content of the metadata.  When t, insert a string as defined by the
+formatting string in `org-rst-metadata-format'.  When set to a
+string, use this formatting string instead (see
+`org-rst-metadata-format' for an example of such a formatting
+string).
+
+When set to a function, apply this function and insert the
+returned string.  The function takes the property list of export
+options as its only argument.
+
+Setting :rst-metadata in publishing projects will take
+precedence over this variable.
+
+Usage:
+#+options: rst-metadata:nil
+#+options: rst-metadata:auto
+#+options: rst-metadata:t
+#+options: rst-metadata:\"\\t:Author: %a\\n\\t:Date: %d\"
+#+options: rst-metadata:\"::\\n\\n\\t:Author: %a\\n\\t:Date: %d\"
+#+options: rst-metadata:\".. meta::\\n\\t:author: %a\\n\\t:date: %d\"
+#+options: rst-metadata:\".. article-info::\\n\\t:Author: %a\\n\\t:Date: %d\"
+#+options: rst-metadata:my-org-rst-metadata-format-function
+(defun my-org-rst-metadata-format-function (info)
+  \"Custom format function for `org-rst-matadata'.\"
+  (let ((author (org-export-data (plist-get info :author) info)))
+    (concat (format \"    :Author: %s\\n\" author))))
+"
+  :group 'org-export-rst
+  :type '(choice (const :tag "No postamble" nil)
+		 (const :tag "Auto postamble" auto)
+		 (const :tag "Default formatting string" t)
+		 (string :tag "Custom formatting string")
+		 (function :tag "Function (must return a string)")))
+
+
+(defcustom org-rst-metadata-format "
+.. meta::
+   :Author: %a
+   :Contact: %e
+   :Date: %d
+"
+  "A format string to format the metadata itself. This format string can
+contain these elements:
+
+  %t stands for the title.
+  %s stands for the subtitle.
+  %a stands for the author's name.
+  %e stands for the author's email.
+  %d stands for the date.
+  %c will be replaced by `org-html-creator-string'.
+  %v will be replaced by `org-html-validation-link'.
+  %T will be replaced by the export time.
+  %C will be replaced by the last modification time.
+
+If you need to use a \"%\" character, you need to escape it
+like that: \"%%\".
+
+Examples:
+
+Put information in a block-quote:
+
+   :Author: %a
+   :Contact: %e
+   :Date: %d
+
+Or, to put information to a meta directive:
+
+.. meta::
+   :author: %a
+   :date: %d
+
+Another example with a sphinx-design directive:
+
+:: article-info
+   :Author: %a
+   :Date: %d
+"
+  :group 'org-export-rst
+  :type '(string :tag "Format string"))
 
 ;;;; Links :: Inline images
 
@@ -322,6 +411,12 @@ in this list - but it does not hurt if it is present."
 	   (symbol :tag "Major mode       ")
 	   (string :tag "Pygments language"))))
 
+(defcustom org-rst-metadata-timestamp-format "%Y-%m-%d %a %H:%M"
+  "Format used for timestamps in metadata.
+See `format-time-string' for more information on its components."
+  :group 'org-export-rst
+  :type 'string)
+
 
 
 ;;; Internal Functions
@@ -476,6 +571,28 @@ INFO is a plist used as a communication channel."
 
 ;;; Template
 
+(defun org-rst-format-spec (info)
+  "Return format specification for metadata.
+INFO is a plist used as a communication channel."
+  ;; (timestamp-format (plist-get info :html-metadata-timestamp-format))
+  ;; org-export-date-timestamp-format
+  (let ((timestamp-format (plist-get info :rst-metadata-timestamp-format)))
+    `((?t . ,(org-export-data (plist-get info :title) info))
+      (?s . ,(org-export-data (plist-get info :subtitle) info))
+      (?d . ,(org-export-data (org-export-get-date info timestamp-format)
+			      info))
+      (?T . ,(format-time-string timestamp-format))
+      (?a . ,(org-export-data (plist-get info :author) info))
+      (?e . ,(mapconcat
+	      (lambda (e) (format "%s" e e))
+	      (split-string (plist-get info :email)  ",+ *")
+	      ", "))
+      (?c . ,(plist-get info :creator))
+      (?C . ,(let ((file (plist-get info :input-file)))
+	       (format-time-string timestamp-format
+				   (and file (file-attribute-modification-time
+					      (file-attributes file)))))))))
+
 (defun org-rst-template--document-title (info)
   "Return document title, as a string.
 INFO is a plist used as a communication channel."
@@ -488,6 +605,8 @@ INFO is a plist used as a communication channel."
 		 (subtitle (if with-title
                        (org-export-data (plist-get info :subtitle) info)
                      ""))
+     (spec (org-rst-format-spec info))
+		 (metadata (plist-get info :rst-metadata))
 		 (author (and (plist-get info :with-author)
 					  (let ((auth (plist-get info :author)))
 						(and auth (org-export-data auth info)))))
@@ -505,20 +624,32 @@ INFO is a plist used as a communication channel."
                        (concat subtitleline "\n"
                                subtitle "\n"
                                subtitleline "\n") "")))
-    (cond
-     ((string= title "")
-      (concat
-       (when (org-string-nw-p author) (concat "    :Author: " author "\n"))
-       (when (org-string-nw-p email) (concat "    :Contact: " email "\n"))
-       (when (org-string-nw-p date) (concat "    :Date: " date "\n"))))
-     (t
+    (concat
+     (unless (string= title "")
       (concat
        title
        subtitle
-       (when (org-string-nw-p author) (concat "\n    :Author: " author))
-       (when (org-string-nw-p email) (concat "\n    :Contact: " email))
-       (when (org-string-nw-p date) (concat "\n    :Date: " date))
-       "\n")))))
+       "\n"))
+     (cond
+      ((eq metadata 'auto)
+       (org-element-normalize-string
+        (org-rst--make-attribute-string
+         (list :Author author :Contact email :Date date))))
+      ((eq metadata t)
+       (concat
+        (format-spec
+         (org-element-normalize-string org-rst-metadata-format)
+		     spec)))
+      ((functionp metadata)
+       (concat
+        (format-spec
+         (org-element-normalize-string (funcall metadata info))
+		     spec)))
+      ((stringp metadata)
+       (concat
+        (format-spec
+         (org-element-normalize-string metadata)
+		     spec)))))))
 
 
 (defun org-rst-template (contents info)
