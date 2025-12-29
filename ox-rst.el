@@ -1318,8 +1318,11 @@ holding contextual information."
   "Transcode a SRC-BLOCK element from Org to reStructuredText.
 CONTENTS holds the contents of the item.  INFO is a plist holding
 contextual information."
+  ;; code is for inline within text
+  ;; code-block (or the alias sourcecode) are for a separate block
   (when (org-string-nw-p (org-element-property :value src-block))
     (let* ((lang (org-element-property :language src-block))
+       (caption (org-export-get-caption src-block))
 		   (label (org-element-property :name src-block))
 		   (value (org-remove-indentation
 				   (org-element-property :value src-block)))
@@ -1329,7 +1332,7 @@ contextual information."
 			(org-export-read-attribute :attr_rst src-block))
 		   (class (plist-get attributes :class)))
       (cond
-       ;; Case 1.
+       ;; Case 1. code-block directive.
        ((eq codeblockd 'code-block)
 		(let ((lst-lang
 			   (or (cadr (assq (intern lang) org-rst-pygments-langs)) lang)))
@@ -1338,9 +1341,10 @@ contextual information."
 		   (when num-start (format "    :lineno-start: %s\n" (1+ num-start)))
 		   (when class (format "    :class: %s\n" class))
 		   (when label (format "    :name: %s\n" label))
+		   (when caption (format "    :caption: %s\n" (org-export-data caption info)))
 		   "\n"
 		   (org-rst--indent-string value org-rst-quote-margin))))
-	   ;; Case 2. code.
+	   ;; Case 2. code directive.
 	   ((eq codeblockd 'code)
 		(let ((lst-lang
 			   (or (cadr (assq (intern lang) org-rst-pygments-langs)) lang)))
@@ -1351,6 +1355,7 @@ contextual information."
 		   (when label (format "    :name: %s\n" label))
 		   "\n"
 		   (org-rst--indent-string value org-rst-quote-margin))))
+	     ;; Case 3. literal block.
        (t
         (concat
          "::\n"
