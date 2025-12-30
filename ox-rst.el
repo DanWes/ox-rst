@@ -93,6 +93,7 @@
 		(?r "As reStructuredText file" org-rst-export-to-rst)))
   :options-alist
   '((:subtitle "SUBTITLE" nil nil parse)
+    (:rst-head "RST_HEAD" nil org-rst-head newline)
     (:rst-link-use-abs-url nil "rst-link-use-abs-url" org-rst-link-use-abs-url)
     (:rst-metadata nil "rst-metadata" org-rst-metadata)
     (:rst-metadata-format nil nil org-rst-metadata-format)
@@ -136,6 +137,25 @@
   "The extension for exported reStructuredText files."
   :group 'org-export-rst
   :type 'string)
+
+
+(defcustom org-rst-head ""
+  "Org-wide head definitions for exported RST files.
+
+This variable can contain the file-wide metadata.
+
+As the value of this option simply gets inserted at the top of the RST
+file, you can use it to add any arbitrary text to the header.
+
+You can set this on a per-file basis using #+RST_HEAD:,
+or for publication projects using the :rst-head property.
+
+Example:
+#+RST_HEAD: :orphan:"
+  :group 'org-export-rst
+  :type 'string)
+;;;###autoload
+(put 'org-rst-head 'safe-local-variable 'stringp)
 
 
 (defcustom org-rst-link-org-files-as-rst t
@@ -605,6 +625,7 @@ INFO is a plist used as a communication channel."
 		 (subtitle (if with-title
                        (org-export-data (plist-get info :subtitle) info)
                      ""))
+     (head (org-element-normalize-string (plist-get info :rst-head)))
      (spec (org-rst-format-spec info))
 		 (metadata (plist-get info :rst-metadata))
 		 (author (and (plist-get info :with-author)
@@ -625,6 +646,7 @@ INFO is a plist used as a communication channel."
                                subtitle "\n"
                                subtitleline "\n") "")))
     (concat
+     (when head (concat head "\n"))
      (unless (string= title "")
       (concat
        title
