@@ -1000,12 +1000,89 @@ CONTENTS is nil.  INFO is a plist holding contextual information."
 
 ;;;; Latex Environment
 
+(defun org-rst--reference (datum info &optional named-only)
+  "Return an appropriate reference for DATUM.
+
+DATUM is an element or a `target' type object.  INFO is the
+current export state, as a plist.
+
+When NAMED-ONLY is non-nil and DATUM has no NAME keyword, return
+nil.  This doesn't apply to headlines, inline tasks, radio
+targets and targets."
+  (let* ((type (org-element-type datum))
+	 (custom-id (and (memq type '(headline inlinetask))
+			 (org-element-property :CUSTOM_ID datum)))
+	 (user-label
+	  (or
+	   custom-id
+	   (and (memq type '(radio-target target))
+		(org-element-property :value datum))
+	   (org-element-property :name datum)
+	   (when-let* ((id (org-element-property :ID datum)))
+	     (concat org-html--id-attr-prefix id)))))
+
+    (cond
+     ((and user-label
+	   (or ;; (plist-get info :html-prefer-user-labels)
+         nil
+	       ;; Used CUSTOM_ID property unconditionally.
+	       custom-id))
+      user-label)
+     ((and named-only
+	   (not (memq type '(headline inlinetask radio-target target)))
+	   (not user-label))
+      nil)
+     (t
+      (org-export-get-reference datum info)))))
+
+(defun org-rst--wrap-latex-environment (contents _ &optional caption label)
+  "Wrap CONTENTS string within appropriate environment for equations.
+When optional arguments CAPTION and LABEL are given, use them for
+caption and \"id\" attribute."
+  (format "\n.. math::\n%s%s%s\n"
+          ;; label.
+          (if (org-string-nw-p label) (format "    :label: %s\n" label) "")
+          ;; Caption.
+          (if (not (org-string-nw-p caption)) ""
+            (format "    :label:%s\n" caption))
+          ;; Contents.
+          (format "\n%s\n" (org-rst--indent-string
+                          (org-trim contents) org-rst-quote-margin))))
+
+(defun org-rst--math-environment-p (element &optional _)
+  "Non-nil when ELEMENT is a LaTeX math environment.
+Math environments match the regular expression defined in
+`org-latex-math-environments-re'.  This function is meant to be
+used as a predicate for `org-export-get-ordinal' or a value to
+`org-html-standalone-image-predicate'."
+  (string-match-p org-latex-math-environments-re
+                  (org-element-property :value element)))
+
+(defun org-rst--latex-environment-numbered-p (element)
+  "Non-nil when ELEMENT is a numbered LaTeX math environment.
+Starred and \"displaymath\" environments are not numbered."
+  (not (string-match-p "\\`[ \t]*\\\\begin{\\(.*\\*\\|displaymath\\)}"
+		       (org-element-property :value element))))
+
 (defun org-rst-latex-environment (latex-environment _contents info)
   "Transcode a LATEX-ENVIRONMENT element from Org to reStructuredText.
 CONTENTS is nil.  INFO is a plist holding contextual
 information."
-  (when (plist-get info :with-latex)
-    (org-remove-indentation (org-element-property :value latex-environment))))
+  (let ((processing-type (plist-get info :with-latex))
+        (latex-frag (org-remove-indentation
+		     (org-element-property :value latex-environment)))
+        (label (org-rst--reference latex-environment info t))
+        (caption (and (org-rst--latex-environment-numbered-p latex-environment)
+                      (org-rst--math-environment-p latex-environment)
+		                  (number-to-string
+		                   (org-export-get-ordinal
+			                  latex-environment info nil
+			                  (lambda (l _)
+			                    (and (org-html--math-environment-p l)
+			                         (org-html--latex-environment-numbered-p l))))))))
+    (when processing-type
+      ;; latex-frag
+      (org-rst--wrap-latex-environment latex-frag info caption label))))
 
 
 ;;;; Latex Fragment
