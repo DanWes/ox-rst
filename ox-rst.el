@@ -1267,7 +1267,8 @@ INFO is a plist holding contextual information."
                  (if (plist-get info :rst-link-use-ref-role)
                      (if desc (format " :ref:`%s <%s>`" desc raw-path)
                        (format " :ref:`%s`" raw-path))
-                   (format "`%s`_" raw-path))
+                   (if desc (format "`%s <%s>`" desc raw-path)
+                     (format "`%s`_" raw-path)))
                (format "`%s`_" (org-rst--build-title destination info nil))))
           ;; Fuzzy link points to a target.
 		  (otherwise
